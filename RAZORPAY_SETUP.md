@@ -1,145 +1,92 @@
-# File: production/RAZORPAY_SETUP.md
-# Standalone file - fixes packaging audit
+# Production Razorpay and Supabase setup
 
-# CiteDeck Production Payment Setup - End-to-End
+## 1. Create the database tables
 
-## Architecture
-```
-User clicks Pay
-  ↓
-Razorpay Payment Link (Rs. 999)
-  ↓
-User pays
-  ↓
-Razorpay -> POST raw body to your webhook
-  ↓
-Webhook verifies HMAC of raw body (not json.dumps)
-  ↓
-Webhook writes to Supabase pro_users (is_pro=true)
-  ↓
-Streamlit app checks Supabase and unlocks Pro
-```
+Run the entire [`supabase_table.sql`](supabase_table.sql) file in your Supabase SQL Editor. The migration is safe to rerun and upgrades earlier CiteDeck V6 webhook tables.
 
-## Step 1: Supabase Setup
+The schema deliberately grants authenticated users **read-only access to their own entitlement**. Anonymous users cannot read customer records, and neither anonymous nor authenticated users can modify payments or Pro access. The webhook service uses the separate service-role key.
 
-1. Go to supabase.com -> New Project
-2. SQL Editor -> Paste `production/supabase_table.sql` -> Run
-3. Verify tables created:
-   ```sql
-   SELECT * FROM pro_users LIMIT 1;
-   SELECT * FROM payment_webhooks LIMIT 1;
-   ```
-4. Get credentials: Settings -> API -> URL and anon/service_role keys
-5. Save:
-   - SUPABASE_URL = https://xyz.supabase.co
-   - SUPABASE_KEY = service_role key (for webhook server) and anon key (for Streamlit read)
+Enable Supabase Authentication email/password sign-in and configure confirmation requirements to match your deployment.
 
-## Step 2: Deploy Webhook Server
+## 2. Configure the Streamlit application
 
-Choose one:
-
-### Render.com (recommended)
-1. Push `production/webhook_server.py` to GitHub repo
-2. Render -> New Web Service -> Connect repo
-3. Build command: `pip install flask supabase razorpay`
-4. Start command: `python production/webhook_server.py`
-5. Env vars:
-   - SUPABASE_URL
-   - SUPABASE_KEY (service_role)
-   - RAZORPAY_WEBHOOK_SECRET (generate random string, e.g., `whsec_123abc`)
-   - PORT = 5000
-6. Deploy -> Note URL: `https://citedeck-webhook.onrender.com`
-
-### Fly.io
-```bash
-fly launch
-fly secrets set SUPABASE_URL=... SUPABASE_KEY=... RAZORPAY_WEBHOOK_SECRET=...
-fly deploy
-```
-
-### Railway
-Similar steps.
-
-## Step 3: Configure Razorpay Webhook
-
-1. Razorpay Dashboard -> Settings -> Webhooks -> Add Webhook
-2. Webhook URL: `https://your-app.onrender.com/razorpay-webhook`
-3. Active Events: Check `payment_link.paid`, `payment.authorized`, `payment.captured`
-4. Secret: Paste same value as RAZORPAY_WEBHOOK_SECRET env var
-5. Save -> Note webhook secret
-
-## Step 4: Streamlit App Secrets
-
-In Streamlit Cloud -> App -> Settings -> Secrets:
+Deploy with `streamlit run app.py` and configure server-side secrets:
 
 ```toml
-TAVILY_API_KEY = "tvly-..."
-OPENAI_API_KEY = "sk-..."
-SUPABASE_URL = "https://xyz.supabase.co"
-SUPABASE_KEY = "your-anon-key-for-client-read"
+OPENAI_API_KEY = "..."
+TAVILY_API_KEY = "..."
+SUPABASE_URL = "https://your-project.supabase.co"
+SUPABASE_ANON_KEY = "your-anon-client-key"
 RAZORPAY_KEY_ID = "rzp_live_..."
-RAZORPAY_KEY_SECRET = "your_razorpay_secret"
-RAZORPAY_WEBHOOK_SECRET = "same_as_webhook_secret_above"
-WEBHOOK_URL = "https://your-app.onrender.com/razorpay-webhook"
+RAZORPAY_KEY_SECRET = "..."
+CITEDECK_PRO_AMOUNT_PAISE = "99900"
+CITEDECK_PRO_CURRENCY = "INR"
+CITEDECK_PRODUCT_CODE = "citedeck_pro"
+CITEDECK_SIGNING_KEY = "a-long-random-server-side-secret"
+CITEDECK_REQUIRE_PRO = "true"
 ```
 
-## Step 5: E2E Test
+Never substitute a service-role key for `SUPABASE_ANON_KEY`.
 
-### Automated tests (no real money)
+## 3. Deploy the webhook backend
+
+Deploy the same repository to a separate HTTPS-enabled backend service with:
+
 ```bash
-pip install supabase razorpay requests python-dotenv
-python production/test_e2e_payment.py
+gunicorn --bind 0.0.0.0:$PORT webhook_server:app
 ```
 
-Checks:
-- Supabase connection
-- Webhook health
-- Raw body signature verification (proves json.dumps issue)
-- Simulated webhook flow
+Set these backend-only environment variables:
 
-### Real payment test (Rs.1)
+```text
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+RAZORPAY_WEBHOOK_SECRET=a-long-random-webhook-secret
+CITEDECK_PRO_AMOUNT_PAISE=99900
+CITEDECK_PRO_CURRENCY=INR
+CITEDECK_PRODUCT_CODE=citedeck_pro
+```
+
+Optional restrictions:
+
+```text
+RAZORPAY_ACCOUNT_ID=acc_...
+RAZORPAY_ALLOWED_PAYMENT_LINK_IDS=plink_123,plink_456
+```
+
+`GET /health` returns HTTP 200 only when both persistence and webhook signing are configured.
+
+## 4. Configure Razorpay events
+
+In Razorpay Dashboard → Settings → Webhooks, add:
+
+```text
+https://your-backend.example.com/razorpay-webhook
+```
+
+Use the exact `RAZORPAY_WEBHOOK_SECRET` value from the backend. Subscribe to:
+
+- `payment_link.paid`
+- `payment.refunded`
+- `refund.processed`, when available for your account
+
+The endpoint verifies the original raw request body with HMAC before decoding JSON. Pro access is granted only if the signed event has the expected amount, currency, real payment/link identifiers, and an authorized/captured payment. Duplicate event IDs are handled idempotently.
+
+## 5. Validate without creating a real charge
+
 ```bash
-# Create real payment link
-curl -u $RAZORPAY_KEY_ID:$RAZORPAY_KEY_SECRET \
-  https://api.razorpay.com/v1/payment_links \
-  -d '{
-    "amount": 100,
-    "currency": "INR",
-    "description": "CiteDeck Pro E2E Test",
-    "customer": {"email": "your-email@example.com"}
-  }'
-
-# Pay at returned short_url with test card
-
-# Check:
-# 1. Render logs should show "Pro granted to your-email@example.com"
-# 2. Supabase pro_users table should have your email is_pro=true
-# 3. Streamlit app should unlock Pro
+python -m unittest discover -s tests -v
+curl -i https://your-backend.example.com/health
 ```
 
-Test card: 4111 1111 1111 1111, any future date, any CVV
+For a real payment test, create a payment link for the **configured production amount** using an authenticated test account or Razorpay test mode. A ₹1 link cannot activate a ₹999 subscription. After payment, refresh the signed-in subscription in the Streamlit sidebar.
 
-## Step 6: Verify Production Ready
+## Security checklist
 
-Checklist:
-- [ ] Supabase table exists and RLS enabled
-- [ ] Webhook deployed and /health returns production_ready=true
-- [ ] Razorpay webhook configured with correct URL and secret
-- [ ] Raw body verification works (test via test_e2e_payment.py)
-- [ ] Real Rs.1 payment goes through: Razorpay -> webhook -> Supabase -> Streamlit unlocks
-- [ ] Audit logs in payment_webhooks table
-
-## Security Notes
-
-- Always verify raw body BEFORE json parsing: `request.get_data()` not `request.json`
-- Use service_role key in webhook server (server-side), anon key in Streamlit (client read)
-- Webhook secret must match in Razorpay dashboard and env var
-- Enable RLS on Supabase tables
-- Log all webhooks for audit
-
-## Troubleshooting
-
-- Signature invalid: Check raw body is used, not json.dumps(payload)
-- Supabase write fails: Check table exists, RLS policy allows service_role
-- Webhook not called: Check Razorpay webhook URL is public HTTPS, not localhost
-- Pro not unlocking in Streamlit: Check SUPABASE_URL and SUPABASE_KEY in Streamlit secrets, and that pro_users table has is_pro=true for email
+- The webhook service has the service-role key; the Streamlit database client uses only the anon key.
+- The Supabase `pro_users` policy is restricted to `authenticated` and the caller's own JWT email.
+- `payment_webhooks` has no client-readable RLS policy.
+- Pro price and currency match between the app and webhook service.
+- Webhook payloads are not stored in full, and customer emails are not returned in webhook responses.
+- Refund events revoke access for the matching payment ID.
+- `CITEDECK_SIGNING_KEY` is long, random, and kept server-side.

@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      PORT: "8501"
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+  webhook:
+    build: .
+    env_file: .env
+    environment:
+      PORT: "5000"
+    command: gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 60 webhook_server:app
+    ports:
+      - "5000:5000"
+    restart: unless-stopped

@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: citedeck-app
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.address=0.0.0.0 --server.port=$PORT --server.headless=true
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: CITEDECK_REQUIRE_PRO
+        value: "true"
+      - key: CITEDECK_PRO_AMOUNT_PAISE
+        value: "99900"
+      - key: CITEDECK_PRO_CURRENCY
+        value: INR
+      - key: CITEDECK_PRODUCT_CODE
+        value: citedeck_pro
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: CITEDECK_SIGNING_KEY
+        generateValue: true
+
+  - type: web
+    name: citedeck-webhook
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 60 webhook_server:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: CITEDECK_PRO_AMOUNT_PAISE
+        value: "99900"
+      - key: CITEDECK_PRO_CURRENCY
+        value: INR
+      - key: CITEDECK_PRODUCT_CODE
+        value: citedeck_pro
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
