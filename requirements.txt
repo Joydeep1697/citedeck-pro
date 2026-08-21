@@ -1,0 +1,14 @@
+streamlit
+pandas
+python-pptx
+pdfplumber
+openpyxl
+python-docx
+requests
+matplotlib
+tavily-python
+openai
+razorpay
+supabase
+flask
+python-dotenv
