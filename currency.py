@@ -30,6 +30,6 @@ def get_fx_with_proof(amount_usd: float, target_currency: str):
                 "source": "https://exchangerate.host",
                 "proof": f"1 USD = {r.get('info', {}).get('rate')} {target_currency} on {r.get('date')} [exchangerate.host]"
             }
-    except:
+    except (requests.RequestException, ValueError, TypeError):
         pass
     return {"converted": None, "proof": "FX conversion failed - showing original currency"}

@@ -1,0 +1,31 @@
+[project]
+name = "citedeck-pro"
+version = "7.0.0"
+description = "Source-grounded investor presentations with fail-closed numeric verification"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 160
+exclude = [
+  "app_full_tavily_openai.py",
+  "app_minimal_working.py",
+  "app_v6_full_pipeline.py",
+  "claim_evidence_graph.py",
+  "folder_parser.py",
+  "payment_e2e_ready_v5.py",
+  "payment_production_v4.py",
+  "qc_atomic_v5.py",
+  "qc_graph_aware_v4.py",
+  "qc_validator_fixed_v3.py",
+  "real_engine_v2.py",
+  "template_populator_real.py",
+  "test_e2e_payment.py",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
