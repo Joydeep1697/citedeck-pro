@@ -12,11 +12,16 @@ CURRENCY_MAP = {
 
 def detect_country_from_idea(idea: str):
     idea_lower = idea.lower()
-    if "india" in idea_lower or "inr" in idea_lower: return "IN"
-    if "japan" in idea_lower or "jpy" in idea_lower or "tokyo" in idea_lower: return "JP"
-    if "uk" in idea_lower or "britain" in idea_lower or "london" in idea_lower: return "GB"
-    if "dubai" in idea_lower or "uae" in idea_lower: return "AE"
-    if "germany" in idea_lower or "france" in idea_lower or "europe" in idea_lower: return "DE"
+    if "india" in idea_lower or "inr" in idea_lower:
+        return "IN"
+    if "japan" in idea_lower or "jpy" in idea_lower or "tokyo" in idea_lower:
+        return "JP"
+    if "uk" in idea_lower or "britain" in idea_lower or "london" in idea_lower:
+        return "GB"
+    if "dubai" in idea_lower or "uae" in idea_lower:
+        return "AE"
+    if "germany" in idea_lower or "france" in idea_lower or "europe" in idea_lower:
+        return "DE"
     return "US"
 
 def get_fx_with_proof(amount_usd: float, target_currency: str):

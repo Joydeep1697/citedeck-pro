@@ -18,6 +18,10 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Check Python syntax
         run: python -m compileall -q .
+      - name: Validate deployment configuration files
+        run: |
+          python -c "import tomllib; tomllib.load(open('.streamlit/config.toml', 'rb'))"
+          python -c "import yaml; yaml.safe_load(open('render.yaml')); yaml.safe_load(open('compose.yaml'))"
       - name: Run deterministic unit and presentation tests
         run: python -m unittest discover -s tests -v
       - name: Lint maintained production code

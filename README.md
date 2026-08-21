@@ -55,6 +55,34 @@ Configure these values as server-side Streamlit secrets or deployment environmen
 
 Deploy `webhook_server.py` as a separate backend service. Its environment additionally requires `SUPABASE_SERVICE_ROLE_KEY` and `RAZORPAY_WEBHOOK_SECRET`. The service-role key must never be passed to client-side or browser code. See [RAZORPAY_SETUP.md](RAZORPAY_SETUP.md).
 
+## Deploy on Render
+
+Connect this GitHub repository to Render and select **New → Blueprint**. The included `render.yaml` creates both the Streamlit application and its separate payment webhook service. Render prompts for each required secret instead of storing credentials in Git.
+
+After the services are created:
+
+1. Run `supabase_table.sql` in your Supabase SQL Editor.
+2. Set the prompted OpenAI, Tavily, Supabase, and Razorpay credentials.
+3. Add the public webhook URL to Razorpay as described in `RAZORPAY_SETUP.md`.
+4. Open the app service URL and sign in.
+
+Check configuration without revealing secret values:
+
+```bash
+python scripts/check_readiness.py --component app
+python scripts/check_readiness.py --component webhook
+```
+
+## Deploy with Docker
+
+Populate `.env` using `.env.example`, then start both services:
+
+```bash
+docker compose up --build -d
+```
+
+The presentation app listens on `http://localhost:8501` and the payment webhook on `http://localhost:5000/razorpay-webhook`. Put the webhook behind a public HTTPS reverse proxy before configuring Razorpay.
+
 ## Tests
 
 ```bash
